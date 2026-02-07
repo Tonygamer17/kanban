@@ -1,4 +1,8 @@
-# Kanban App
+Kanban App
+
+🚧 Projeto em desenvolvimento
+
+Um aplicativo de kanban simples e eficiente construído com Next.js, TypeScript e Supabase.
 
 Um aplicativo de kanban simples e eficiente construído com Next.js, TypeScript e Supabase.
 
