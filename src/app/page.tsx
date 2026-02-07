@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useKanbanStore } from '@/lib/store';
 import { BoardComponent } from '@/components/kanban/Board';
-import { Plus, Loader2, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 import { fetchBoardWithColumns } from '@/lib/store';
 import { useAuth } from '@/components/AuthContextProvider'; // NEW
 import { Team } from '@/types/kanban'; // NEW
@@ -14,31 +14,87 @@ export default function HomePage() {
   
   
   const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isCreatingBoard, setIsCreatingBoard] = useState(false);
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false);
   const [newBoardTitle, setNewBoardTitle] = useState('');
+  const fetchedTeamsForUserRef = useRef<string | null>(null);
   const { user, signOut } = useAuth(); // Get user and signOut from auth context
   
   
   
-  const { 
-    boards, 
-    currentBoard, 
-    loading, 
-    error, 
-    fetchBoards, 
-    createBoard, 
-    updateBoard,
-    deleteBoard,
+  const {
+    boards,
+    currentBoard,
+    loading,
+    error,
+    fetchBoards,
+    createBoard,
     setCurrentBoard,
     teams, // NEW
     fetchTeams, // NEW
     createTeam // NEW
   } = useKanbanStore();
 
-  // Estados para edição de board
-  const [editingBoardId, setEditingBoardId] = useState<string | null>(null);
-  const [editingBoardName, setEditingBoardName] = useState('');
-  const [editingBoardDescription, setEditingBoardDescription] = useState('');
+  const uniqueTeams = useMemo(() => {
+    const byId = new Map<string, Team>();
+    for (const team of teams) {
+      if (team?.id && !byId.has(team.id)) {
+        byId.set(team.id, team);
+      }
+    }
+    return Array.from(byId.values());
+  }, [teams]);
+
+  const uniqueBoards = useMemo(() => {
+    const byId = new Map<string, (typeof boards)[number]>();
+    for (const board of boards) {
+      if (board?.id && !byId.has(board.id)) {
+        byId.set(board.id, board);
+      }
+    }
+    return Array.from(byId.values());
+  }, [boards]);
+
+  const sidebarTeamGroups = useMemo(() => {
+    const byName = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        teamIds: string[];
+      }
+    >();
+
+    for (const team of uniqueTeams) {
+      const normalizedName = team.name.trim().toLowerCase();
+      const existing = byName.get(normalizedName);
+
+      if (existing) {
+        existing.teamIds.push(team.id);
+      } else {
+        byName.set(normalizedName, {
+          id: team.id,
+          name: team.name,
+          teamIds: [team.id],
+        });
+      }
+    }
+
+    return Array.from(byName.values());
+  }, [uniqueTeams]);
+
+  const renderTeamOptions = () => {
+    const options = [];
+    for (const team of uniqueTeams) {
+      options.push(
+        <option key={team.id} value={team.id}>
+          {team.name}
+        </option>
+      );
+    }
+    return options;
+  };
   
   
 
@@ -62,25 +118,36 @@ export default function HomePage() {
 
   // NEW useEffect to fetch teams for the authenticated user
   useEffect(() => {
-    if (user?.id) {
-      
-      fetchTeams(user.id);
+    if (!user?.id) {
+      fetchedTeamsForUserRef.current = null;
+      return;
     }
+
+    if (fetchedTeamsForUserRef.current === user.id) {
+      return;
+    }
+    fetchedTeamsForUserRef.current = user.id;
+    fetchTeams(user.id);
   }, [user?.id, fetchTeams]);
 
   useEffect(() => {
-    
-    
-    if (boards.length > 0 && !selectedBoardId) {
-      // Auto-select first board
-      const firstBoard = boards[0];
-      
-      setTimeout(() => {
-        setSelectedBoardId(firstBoard.id);
-        loadBoard(firstBoard.id);
-      }, 0);
+    if (isCreatingBoard) {
+      return;
     }
-  }, [boards, selectedBoardId, loadBoard]);
+
+    if (uniqueBoards.length > 0 && !selectedBoardId) {
+      // Auto-select first board
+      const firstBoard = uniqueBoards[0];
+      setSelectedBoardId(firstBoard.id);
+      loadBoard(firstBoard.id);
+    }
+  }, [uniqueBoards, selectedBoardId, loadBoard, isCreatingBoard]);
+
+  useEffect(() => {
+    if (!selectedTeamId && uniqueTeams.length > 0) {
+      setSelectedTeamId(uniqueTeams[0].id);
+    }
+  }, [uniqueTeams, selectedTeamId]);
 
   const handleCreateBoard = async () => {
     
@@ -89,26 +156,7 @@ export default function HomePage() {
       return;
     }
 
-    let targetTeamId: string | undefined;
-
-    if (teams.length > 0) {
-      targetTeamId = teams[0].id; // Use the first available team
-      
-    } else if (user?.id) {
-      // If no teams, create a default team for the user
-      
-      try {
-        const defaultTeam = await createTeam('My First Team', user.id);
-        targetTeamId = defaultTeam.id;
-        
-      } catch (err) {
-        console.error('❌ ERROR: Failed to create default team:', err);
-        return; // Stop if team creation fails
-      }
-    } else {
-      console.error('❌ ERROR: Cannot create board without a user or team.');
-      return;
-    }
+    const targetTeamId = selectedTeamId || uniqueTeams[0]?.id;
     
     if (!targetTeamId) {
       console.error('❌ ERROR: No team ID available to create board.');
@@ -119,55 +167,41 @@ export default function HomePage() {
       await createBoard(newBoardTitle, targetTeamId); // Pass targetTeamId
       setNewBoardTitle('');
       setIsCreatingBoard(false);
+      setSelectedTeamId(targetTeamId);
       
     } catch (error) {
       console.error('❌ ERROR: Board creation failed:', error);
     }
   };
 
+  const handleCreateFirstTeam = async () => {
+    if (!user?.id || isCreatingTeam) {
+      return;
+    }
+
+    const existingDefaultTeam = uniqueTeams.find(
+      (team) => team.name.trim().toLowerCase() === 'my first team'
+    );
+
+    if (existingDefaultTeam) {
+      setSelectedTeamId(existingDefaultTeam.id);
+      return;
+    }
+
+    setIsCreatingTeam(true);
+    try {
+      const team = await createTeam('My First Team', user.id);
+      setSelectedTeamId(team.id);
+    } catch (error) {
+      console.error('❌ ERROR: Failed to create first team:', error);
+    } finally {
+      setIsCreatingTeam(false);
+    }
+  };
+
   const handleBoardSelect = (boardId: string) => {
     setSelectedBoardId(boardId);
     loadBoard(boardId);
-  };
-
-  // Funções para editar board
-  const handleStartEdit = (board: typeof boards[0]) => {
-    setEditingBoardId(board.id);
-    setEditingBoardName(board.name);
-    setEditingBoardDescription(board.description || '');
-  };
-
-  const handleCancelEdit = () => {
-    setEditingBoardId(null);
-    setEditingBoardName('');
-    setEditingBoardDescription('');
-  };
-
-  const handleSaveEdit = async (boardId: string) => {
-    if (!editingBoardName.trim()) return;
-    
-    try {
-      await updateBoard(boardId, editingBoardName, editingBoardDescription);
-      setEditingBoardId(null);
-      setEditingBoardName('');
-      setEditingBoardDescription('');
-    } catch (err) {
-      console.error('Failed to update board:', err);
-    }
-  };
-
-  const handleDeleteBoard = async (boardId: string, boardName: string) => {
-    if (confirm(`Tem certeza que deseja excluir o board "${boardName}"?\nEsta ação não pode ser desfeita.`)) {
-      try {
-        await deleteBoard(boardId);
-        if (selectedBoardId === boardId) {
-          setSelectedBoardId(null);
-          setCurrentBoard(null);
-        }
-      } catch (err) {
-        console.error('Failed to delete board:', err);
-      }
-    }
   };
 
   if (loading && boards.length === 0 && teams.length === 0) { // Modified loading condition
@@ -242,11 +276,12 @@ export default function HomePage() {
           ) : (
                 <span>
                   <button
-                    onClick={() => setIsCreatingBoard(true)}
+                    onClick={handleCreateFirstTeam}
+                    disabled={isCreatingTeam}
                     className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors mr-4"
                   >
                     <Plus size={20} />
-                    <span>Criar Primeiro Team</span>
+                    <span>{isCreatingTeam ? 'Criando...' : 'Criar Primeiro Team'}</span>
                   </button>
                   <button
                     onClick={signOut}
@@ -282,13 +317,13 @@ export default function HomePage() {
         
         <div className="flex-1 p-4 overflow-y-auto">
           {/* Display teams and boards */}
-          {teams.length > 0 ? (
-            teams.map((team: Team) => (
-              <div key={team.id} className="mb-4">
-                <h3 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-2">{team.name}</h3>
+          {sidebarTeamGroups.length > 0 ? (
+            sidebarTeamGroups.map((teamGroup) => (
+              <div key={teamGroup.id} className="mb-4">
+                <h3 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-2">{teamGroup.name}</h3>
                 <div className="space-y-2 pl-2">
-                  {boards
-                    .filter(board => board.team_id === team.id)
+                  {uniqueBoards
+                    .filter((board) => teamGroup.teamIds.includes(board.team_id))
                     .map((board) => (
                     <button
                       key={board.id}
@@ -309,13 +344,14 @@ export default function HomePage() {
                   <button
                     onClick={() => {
                       setSelectedBoardId(null); // Clear selected board to show "create board" UI for this team
+                      setCurrentBoard(null);
+                      setSelectedTeamId(teamGroup.id);
                       setIsCreatingBoard(true);
-                      // Potentially open a modal to create board for this team
                     }}
                     className="mt-2 w-full px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex items-center justify-center gap-2 text-sm"
                   >
                     <Plus size={14} />
-                    <span>Novo Board para {team.name}</span>
+                    <span>Novo Board para {teamGroup.name}</span>
                   </button>
                 </div>
               </div>
@@ -325,11 +361,12 @@ export default function HomePage() {
               Nenhum time encontrado. Crie um novo.
               <button
                 onClick={() => {
-                  if (user?.id) createTeam('My First Team', user.id);
+                  handleCreateFirstTeam();
                 }}
+                disabled={isCreatingTeam}
                 className="mt-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
               >
-                Criar Primeiro Time
+                {isCreatingTeam ? 'Criando...' : 'Criar Primeiro Time'}
               </button>
             </div>
           )}
@@ -357,33 +394,31 @@ export default function HomePage() {
                   placeholder="Nome do board"
                   autoFocus
                 />
-                {teams.length > 0 && (
+                {uniqueTeams.length > 0 && (
                   <div className="mb-4">
                     <label htmlFor="team-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Selecionar Time
                     </label>
                     <select
                       id="team-select"
-                      // You'll need state to manage selected team if multiple exist
-                      // For now, auto-select first
-                      onChange={() => {
-                        // Implement logic to select team, for simplicity, using first team's ID
-                      }}
+                      onChange={(e) => setSelectedTeamId(e.target.value)}
                       className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={teams[0]?.id || ''} // Default to first team
-                      disabled={teams.length === 0}
+                      value={selectedTeamId || uniqueTeams[0]?.id || ''}
+                      disabled={uniqueTeams.length === 0}
                     >
-                      {teams.map((team: Team) => (
-                        <option key={team.id} value={team.id}>
-                          {team.name}
-                        </option>
-                      ))}
+                      {renderTeamOptions()}
                     </select>
                   </div>
+                )}
+                {uniqueTeams.length === 0 && (
+                  <p className="mb-4 text-sm text-yellow-700 dark:text-yellow-400">
+                    Crie um time primeiro para poder criar um board.
+                  </p>
                 )}
                 <div className="flex gap-3">
                   <button
                     onClick={handleCreateBoard}
+                    disabled={uniqueTeams.length === 0}
                     className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                   >
                     Criar Board
@@ -392,9 +427,9 @@ export default function HomePage() {
                     onClick={() => {
                       setNewBoardTitle('');
                       setIsCreatingBoard(false);
-                      setSelectedBoardId(boards[0]?.id || null); // Go back to first board or null
-                      if (boards.length > 0) loadBoard(boards[0].id);
-                    }}
+                       setSelectedBoardId(uniqueBoards[0]?.id || null); // Go back to first board or null
+                       if (uniqueBoards.length > 0) loadBoard(uniqueBoards[0].id);
+                     }}
                     className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
                   >
                     Cancelar

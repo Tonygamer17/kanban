@@ -42,12 +42,17 @@ export const teamsApi = {
     if (memberError) throw memberError;
     
     // Combine and deduplicate
-    const memberTeams = memberData?.map(m => m.teams).filter(Boolean) || [];
+    const memberTeams = (memberData || [])
+      .flatMap((member: { teams: unknown }) =>
+        Array.isArray(member.teams) ? member.teams : [member.teams]
+      )
+      .filter(Boolean);
     const allTeams = [...(ownedTeams || []), ...memberTeams];
     
     // Remove duplicates by ID
     const uniqueTeams = allTeams.filter((team, index, self) =>
-      index === self.findIndex((t) => t.id === team.id)
+      Boolean((team as { id?: string })?.id) &&
+      index === self.findIndex((t) => (t as { id?: string })?.id === (team as { id?: string })?.id)
     );
     
     return uniqueTeams;

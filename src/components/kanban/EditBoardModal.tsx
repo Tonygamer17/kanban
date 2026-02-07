@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { BoardWithColumns } from '@/types/kanban';
 
 interface EditBoardModalProps {
@@ -8,18 +8,22 @@ interface EditBoardModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (boardId: string, newName: string) => void;
+  onDelete: (boardId: string) => void;
 }
 
-export const EditBoardModal: React.FC<EditBoardModalProps> = ({ board, isOpen, onClose, onSave }) => {
+export const EditBoardModal: React.FC<EditBoardModalProps> = ({ board, isOpen, onClose, onSave, onDelete }) => {
   const [boardName, setBoardName] = useState(board.name);
-
-  useEffect(() => {
-    setBoardName(board.name);
-  }, [board.name]);
 
   const handleSave = () => {
     if (boardName.trim()) {
       onSave(board.id, boardName);
+      onClose();
+    }
+  };
+
+  const handleDelete = () => {
+    if (confirm(`Tem certeza que deseja excluir o board "${board.name}"? Esta acao nao pode ser desfeita.`)) {
+      onDelete(board.id);
       onClose();
     }
   };
@@ -42,19 +46,27 @@ export const EditBoardModal: React.FC<EditBoardModalProps> = ({ board, isOpen, o
             onChange={(e) => setBoardName(e.target.value)}
           />
         </div>
-        <div className="flex justify-end gap-3">
+        <div className="flex items-center justify-between gap-3">
           <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-700 transition-colors"
+            onClick={handleDelete}
+            className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
           >
-            Cancelar
+            Excluir Board
           </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-          >
-            Salvar
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-800 dark:text-gray-100 rounded-lg hover:bg-gray-400 dark:hover:bg-gray-700 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              Salvar
+            </button>
+          </div>
         </div>
       </div>
     </div>

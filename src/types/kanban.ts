@@ -43,17 +43,6 @@ export interface Task {
   position: number;
 }
 
-// Tipos legacy para compatibilidade
-export interface Card {
-  id: string;
-  title: string;
-  description?: string;
-  column_id: string;
-  order_index: number;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface TaskAssignee {
   id: string;
   task_id: string;
@@ -64,7 +53,6 @@ export interface TaskAssignee {
 
 // Extended types with nested data
 export interface ColumnWithCards extends Column {
-  cards: Card[];
   tasks: Task[];
 }
 
@@ -76,7 +64,6 @@ export interface BoardWithColumns extends Board {
 export interface KanbanState {
   boards: Board[];
   columns: Column[];
-  cards: Card[];
   tasks: Task[];
   currentBoard: BoardWithColumns | null;
   teams: Team[];
@@ -89,7 +76,7 @@ export interface KanbanActions {
   // Boards
   fetchBoards: () => Promise<void>;
   createBoard: (title: string, teamId: string) => Promise<void>;
-  updateBoard: (id: string, title: string) => Promise<void>;
+  updateBoard: (id: string, title: string, description?: string) => Promise<void>;
   deleteBoard: (id: string) => Promise<void>;
   setCurrentBoard: (board: BoardWithColumns | null) => void;
   
