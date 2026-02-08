@@ -4,7 +4,7 @@ import { Task, TeamMember } from '@/types/kanban';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Edit2, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useKanbanStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { AssigneesComponent } from './Assignees';
@@ -19,6 +19,15 @@ interface CardProps {
   className?: string;
 }
 
+type TaskStatus = 'todo' | 'in_progress' | 'done';
+
+const normalizeStatus = (value?: string | null): TaskStatus => {
+  if (value === 'in_progress' || value === 'done') {
+    return value;
+  }
+  return 'todo';
+};
+
 export function Card({
   task,
   teamId,
@@ -29,8 +38,10 @@ export function Card({
   className,
 }: CardProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
   const [editDescription, setEditDescription] = useState(task.description || '');
+  const [statusValue, setStatusValue] = useState<TaskStatus>(normalizeStatus(task.status));
 
   const { updateTask, deleteTask } = useKanbanStore();
 
@@ -41,15 +52,82 @@ export function Card({
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.5 : 1,
+    opacity: isDragging ? 0.55 : 1,
   };
+
+  useEffect(() => {
+    setStatusValue(normalizeStatus(task.status));
+  }, [task.status]);
+
+  const statusLabelMap: Record<string, string> = {
+    todo: 'A fazer',
+    in_progress: 'Em andamento',
+    done: 'Concluído',
+  };
+
+  const statusStyles: Record<string, string> = {
+    todo: 'text-slate-500 dark:text-slate-400',
+    in_progress: 'text-amber-600 dark:text-amber-400',
+    done: 'text-emerald-600 dark:text-emerald-400',
+  };
+
+  const updatedLabel = useMemo(() => {
+    const baseDate = task.updated_at || task.created_at;
+    if (!baseDate) return '';
+
+    const diffMs = Date.now() - new Date(baseDate).getTime();
+    if (Number.isNaN(diffMs) || diffMs < 60_000) {
+      return 'Atualizado agora';
+    }
+
+    const minutes = Math.floor(diffMs / 60_000);
+    if (minutes < 60) {
+      return `Atualizado ha ${minutes} min`;
+    }
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) {
+      return `Atualizado ha ${hours} h`;
+    }
+
+    const days = Math.floor(hours / 24);
+    return `Atualizado ha ${days} d`;
+  }, [task.updated_at, task.created_at]);
 
   const handleUpdate = async () => {
     try {
-      await updateTask(task.id, editTitle, editDescription);
+      await updateTask(task.id, {
+        title: editTitle,
+        description: editDescription,
+      });
       setIsEditing(false);
     } catch (error) {
       console.error('Failed to update task:', error);
+    }
+  };
+
+  const handleStatusChange = async (value: TaskStatus) => {
+    if (!value) return;
+    console.log('[task-status] update:start', { taskId: task.id, newStatus: value });
+
+    setStatusValue(value);
+    setIsUpdatingStatus(true);
+
+    try {
+      await updateTask(task.id, {
+        status: value,
+        updated_at: new Date().toISOString(),
+      });
+      console.log('[task-status] update:success', { taskId: task.id, newStatus: value });
+    } catch (error) {
+      console.error('[task-status] update:error', {
+        taskId: task.id,
+        newStatus: value,
+        error,
+      });
+      setStatusValue(normalizeStatus(task.status));
+    } finally {
+      setIsUpdatingStatus(false);
     }
   };
 
@@ -75,7 +153,7 @@ export function Card({
         ref={setNodeRef}
         style={style}
         className={cn(
-          'bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700',
+          'bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700',
           className
         )}
       >
@@ -84,27 +162,27 @@ export function Card({
             type="text"
             value={editTitle}
             onChange={(e) => setEditTitle(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Título da task"
             autoFocus
           />
           <textarea
             value={editDescription}
             onChange={(e) => setEditDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            className="w-full px-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             placeholder="Descrição (opcional)"
             rows={3}
           />
           <div className="flex gap-2">
             <button
               onClick={handleUpdate}
-              className="px-3 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors text-sm"
+              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors text-sm"
             >
               Salvar
             </button>
             <button
               onClick={handleCancel}
-              className="px-3 py-1 bg-gray-500 text-white rounded-md hover:bg-gray-600 transition-colors text-sm"
+              className="px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors text-sm"
             >
               Cancelar
             </button>
@@ -115,26 +193,35 @@ export function Card({
   }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn(
-        'bg-white dark:bg-gray-800 rounded-lg p-4 shadow-sm border border-gray-200 dark:border-gray-700 cursor-pointer hover:shadow-md transition-shadow group',
-        className
-      )}
-      role="article"
-      aria-labelledby={`task-${task.id}-title`}
-    >
-      <div className="flex items-start justify-between gap-3">
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={cn(
+          'bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group',
+          className
+        )}
+        role="article"
+        aria-labelledby={`task-${task.id}-title`}
+      >
+      <div className="flex items-start justify-between gap-4">
         <div className="flex-1">
-          <h3 id={`task-${task.id}-title`} className="font-medium text-gray-900 dark:text-gray-100 mb-2">
+          <div className="mb-3 flex items-center gap-2">
+            {statusLabelMap[statusValue] ? (
+              <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium', statusStyles[statusValue] || statusStyles.todo)}>
+                <span className="text-[10px] leading-none">●</span>
+                {statusLabelMap[statusValue]}
+              </span>
+            ) : null}
+          </div>
+
+          <h3 id={`task-${task.id}-title`} className="text-[15px] leading-6 font-semibold text-gray-900 dark:text-gray-100 mb-3">
             {task.title}
           </h3>
           {task.description && (
-            <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-3 mb-3">{task.description}</p>
+            <p className="text-sm leading-6 text-gray-600 dark:text-gray-400 line-clamp-3 mb-5">{task.description}</p>
           )}
 
-          <div className="mb-3">
+          <div className="mb-4">
             <AssigneesComponent
               taskId={task.id}
               teamId={teamId}
@@ -144,13 +231,29 @@ export function Card({
               onUpdate={(updatedAssignees) => onAssigneesChange(task.id, updatedAssignees)}
             />
           </div>
+
+          <div className="pt-1 flex items-center justify-between gap-3">
+            <select
+              value={statusValue}
+              onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
+              disabled={isUpdatingStatus}
+              className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-[11px] font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 disabled:opacity-60"
+            >
+              <option value="todo">A fazer</option>
+              <option value="in_progress">Em andamento</option>
+              <option value="done">Concluído</option>
+            </select>
+
+            {updatedLabel ? <span className="text-[11px] text-gray-400">{updatedLabel}</span> : null}
+          </div>
+
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 opacity-0 translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 pointer-events-none group-hover:pointer-events-auto transition-all duration-200">
           <button
             {...attributes}
             {...listeners}
-            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 dark:hover:text-gray-300 dark:hover:bg-gray-800 transition-colors"
             aria-label="Drag task"
           >
             <GripVertical size={16} />
@@ -158,7 +261,7 @@ export function Card({
 
           <button
             onClick={() => setIsEditing(true)}
-            className="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+            className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:text-blue-400 dark:hover:bg-blue-900/20 transition-colors"
             aria-label={`Edit task ${task.title}`}
           >
             <Edit2 size={14} />
@@ -166,7 +269,7 @@ export function Card({
 
           <button
             onClick={handleDelete}
-            className="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+            className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-colors"
             aria-label={`Delete task ${task.title}`}
           >
             <Trash2 size={14} />

@@ -37,6 +37,7 @@ export interface Task {
   title: string;
   description: string | null;
   created_at: string;
+  updated_at?: string | null;
   due_date: string | null;
   priority: 'low' | 'medium' | 'high';
   status: 'todo' | 'in_progress' | 'done';
@@ -94,7 +95,15 @@ export interface KanbanActions {
   // Tasks
   fetchTasks: (columnId: string) => Promise<void>;
   createTask: (columnId: string, title: string, description?: string) => Promise<void>;
-  updateTask: (id: string, title: string, description?: string) => Promise<void>;
+  updateTask: (
+    id: string,
+    updates: {
+      title?: string;
+      description?: string;
+      status?: Task['status'];
+      updated_at?: string;
+    }
+  ) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   moveTask: (taskId: string, targetColumnId: string, newIndex: number) => Promise<void>;
   

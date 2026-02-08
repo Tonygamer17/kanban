@@ -6,7 +6,7 @@ import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortabl
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { fetchBoardWithColumns, useKanbanStore } from '@/lib/store';
 import { ColumnComponent } from './Column';
-import { Plus, Edit } from 'lucide-react';
+import { Plus, Edit, ChevronRight, LayoutGrid, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BoardErrorBoundary } from '@/components/ErrorBoundary';
 import { BoardFilters, FilterOptions } from './BoardFilters';
@@ -194,86 +194,128 @@ export function BoardComponent({ board, className }: BoardProps) {
     }
   };
 
-  const allTasks = useMemo(() => filteredBoard.columns.flatMap((column) => column.tasks || []), [filteredBoard.columns]);
+  const allTasks = useMemo(() => board.columns.flatMap((column) => column.tasks || []), [board.columns]);
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       const { active, over } = event;
       if (!over) return;
 
-      const draggedTask = allTasks.find((task) => task.id === active.id);
-      const targetTask = allTasks.find((task) => task.id === over.id);
-      if (!draggedTask || !targetTask) return;
+      const activeId = String(active.id);
+      const overId = String(over.id);
 
-      if (draggedTask.column_id !== targetTask.column_id) {
-        await moveTask(draggedTask.id, targetTask.column_id, 0);
-      } else {
-        const sourceColumnTasks = allTasks.filter((task) => task.column_id === draggedTask.column_id);
-        const sourceIndex = sourceColumnTasks.findIndex((task) => task.id === draggedTask.id);
-        const targetIndex = sourceColumnTasks.findIndex((task) => task.id === targetTask.id);
-
-        if (sourceIndex !== targetIndex) {
-          await moveTask(draggedTask.id, draggedTask.column_id, targetIndex);
-        }
+      if (activeId === overId) {
+        return;
       }
+
+      const draggedTask = allTasks.find((task) => task.id === active.id);
+      if (!draggedTask) return;
+
+      const targetTask = allTasks.find((task) => task.id === overId);
+      const targetColumnId = targetTask
+        ? targetTask.column_id
+        : board.columns.find((column) => column.id === overId)?.id;
+
+      if (!targetColumnId) {
+        return;
+      }
+
+      const targetColumnTasks = allTasks
+        .filter((task) => task.column_id === targetColumnId)
+        .sort((a, b) => a.position - b.position);
+
+      const sourceColumnTasks = allTasks
+        .filter((task) => task.column_id === draggedTask.column_id)
+        .sort((a, b) => a.position - b.position);
+
+      const sourceIndex = sourceColumnTasks.findIndex((task) => task.id === draggedTask.id);
+      const targetIndex = targetTask
+        ? targetColumnTasks.findIndex((task) => task.id === targetTask.id)
+        : targetColumnTasks.length;
+
+      if (sourceIndex < 0 || targetIndex < 0) {
+        return;
+      }
+
+      if (draggedTask.column_id === targetColumnId && sourceIndex === targetIndex) {
+        return;
+      }
+
+      await moveTask(draggedTask.id, targetColumnId, targetIndex);
+      await refreshBoardState();
     },
-    [allTasks, moveTask]
+    [allTasks, board.columns, moveTask, refreshBoardState]
   );
 
   return (
     <BoardErrorBoundary>
       <div className={cn('flex flex-col h-full bg-gray-100 dark:bg-gray-950', className)}>
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{board.name}</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-              {filteredBoard.columns.length} colunas •{' '}
-              {filteredBoard.columns.reduce((acc, col) => acc + (col.tasks?.length || 0), 0)} tasks
-              {(filters.searchText || filters.assigneeId) && (
-                <span className="ml-2 text-blue-600 dark:text-blue-400">(filtered)</span>
-              )}
-            </p>
-          </div>
+        <div className="px-8 pt-6 pb-5 border-b border-gray-200 dark:border-gray-800 bg-white/80 dark:bg-gray-950/80 backdrop-blur-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-[0.08em] text-gray-500 dark:text-gray-400">
+                <span>Workspace</span>
+                <ChevronRight size={12} />
+                <span className="text-gray-700 dark:text-gray-200">{board.name}</span>
+              </div>
+              <h1 className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">{board.name}</h1>
+              <div className="mt-3 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200/80 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  <LayoutGrid size={12} />
+                  {filteredBoard.columns.length} colunas
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200/80 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  <CheckSquare size={12} />
+                  {filteredBoard.columns.reduce((acc, col) => acc + (col.tasks?.length || 0), 0)} tasks
+                </span>
+                {(filters.searchText || filters.assigneeId) && (
+                  <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                    filtrado
+                  </span>
+                )}
+              </div>
+            </div>
 
-          <div className="flex gap-2">
-            {!isAddingColumn && (
+            <div className="flex gap-2.5">
+              {!isAddingColumn && (
+                <button
+                  onClick={() => setIsAddingColumn(true)}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors shadow-sm"
+                >
+                  <Plus size={16} />
+                  <span>Adicionar Coluna</span>
+                </button>
+              )}
               <button
-                onClick={() => setIsAddingColumn(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                onClick={() => setIsEditingBoard(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 transition-colors dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
               >
-                <Plus size={16} />
-                <span>Adicionar Coluna</span>
+                <Edit size={16} />
+                <span>Editar Board</span>
               </button>
-            )}
-            <button
-              onClick={() => setIsEditingBoard(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-            >
-              <Edit size={16} />
-              <span>Editar Board</span>
-            </button>
+            </div>
           </div>
         </div>
 
-        <div className="px-6 pt-4">
+        <div className="px-8 pt-4">
           <BoardFilters filters={filters} teamMembers={teamMembers} onFiltersChange={setFilters} />
         </div>
 
         {isAddingColumn && (
-          <div className="p-6 border-b border-gray-200 dark:border-gray-800">
+          <div className="px-8 py-5 border-b border-gray-200 dark:border-gray-800">
             <div className="flex gap-3">
               <input
                 type="text"
                 value={newColumnName}
                 onChange={(e) => setNewColumnName(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Nome da coluna"
                 autoFocus
               />
               <button
                 onClick={handleCreateColumn}
                 disabled={isCreatingColumn}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {isCreatingColumn ? 'Adicionando...' : 'Adicionar'}
               </button>
@@ -282,7 +324,7 @@ export function BoardComponent({ board, className }: BoardProps) {
                   setNewColumnName('');
                   setIsAddingColumn(false);
                 }}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                className="px-4 py-2.5 bg-gray-500 text-white rounded-xl hover:bg-gray-600 transition-colors"
               >
                 Cancelar
               </button>
@@ -290,10 +332,10 @@ export function BoardComponent({ board, className }: BoardProps) {
           </div>
         )}
 
-        <div className="flex-1 p-6 overflow-x-auto">
+        <div className="flex-1 px-8 py-6 overflow-x-auto">
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <SortableContext items={filteredBoard.columns.map((col) => col.id)} strategy={horizontalListSortingStrategy}>
-              <div className="flex gap-6 h-full">
+              <div className="flex gap-7 h-full items-start">
                 {filteredBoard.columns.map((column) => (
                   <ColumnComponent
                     key={column.id}
@@ -312,7 +354,7 @@ export function BoardComponent({ board, className }: BoardProps) {
                 {!isAddingColumn && board.columns.length > 0 && (
                   <button
                     onClick={() => setIsAddingColumn(true)}
-                    className="w-80 h-fit p-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex items-center justify-center gap-2"
+                    className="w-80 h-fit p-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-300 transition-colors flex items-center justify-center gap-2 bg-white/70 dark:bg-gray-900/50"
                   >
                     <Plus size={20} />
                     <span>Adicionar outra coluna</span>
@@ -329,6 +371,7 @@ export function BoardComponent({ board, className }: BoardProps) {
           onClose={() => setIsEditingBoard(false)}
           onSave={async (boardId, newName) => {
             await updateBoard(boardId, newName);
+            await refreshBoardState();
             setIsEditingBoard(false);
           }}
           onDelete={async (boardId) => {

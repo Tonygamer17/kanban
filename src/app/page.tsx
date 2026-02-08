@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useKanbanStore } from '@/lib/store';
 import { BoardComponent } from '@/components/kanban/Board';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, LogOut, Folder } from 'lucide-react';
 import { fetchBoardWithColumns } from '@/lib/store';
 import { useAuth } from '@/components/AuthContextProvider'; // NEW
 import { Team } from '@/types/kanban'; // NEW
@@ -84,19 +84,13 @@ export default function HomePage() {
     return Array.from(byName.values());
   }, [uniqueTeams]);
 
-  const renderTeamOptions = () => {
-    const options = [];
-    for (const team of uniqueTeams) {
-      options.push(
-        <option key={team.id} value={team.id}>
-          {team.name}
-        </option>
-      );
+  const getSidebarTeamName = (name: string) => {
+    const normalized = name.trim().toLowerCase();
+    if (normalized === 'my first team' || normalized === 'primeiro time') {
+      return 'Workspace';
     }
-    return options;
+    return name;
   };
-  
-  
 
   const loadBoard = useCallback(async (boardId: string) => {
     
@@ -180,7 +174,7 @@ export default function HomePage() {
     }
 
     const existingDefaultTeam = uniqueTeams.find(
-      (team) => team.name.trim().toLowerCase() === 'my first team'
+      (team) => team.name.trim().toLowerCase() === 'workspace'
     );
 
     if (existingDefaultTeam) {
@@ -190,7 +184,7 @@ export default function HomePage() {
 
     setIsCreatingTeam(true);
     try {
-      const team = await createTeam('My First Team', user.id);
+      const team = await createTeam('Workspace', user.id);
       setSelectedTeamId(team.id);
     } catch (error) {
       console.error('❌ ERROR: Failed to create first team:', error);
@@ -299,44 +293,49 @@ export default function HomePage() {
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-950">
       {/* Sidebar */}
-      <div className="w-64 bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col">
-        <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+      <div className="w-72 bg-gray-950 border-r border-gray-800/90 flex flex-col">
+        <div className="p-5 border-b border-gray-800/80">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold tracking-wide uppercase text-gray-200">
               Meus Boards
             </h2>
             <button
               onClick={signOut}
-              className="px-3 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              className="inline-flex items-center justify-center h-8 w-8 rounded-md text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-all duration-200"
               title="Sair"
             >
-              <span className="text-xs">Sair</span>
+              <LogOut size={15} />
             </button>
           </div>
         </div>
-        
-        <div className="flex-1 p-4 overflow-y-auto">
+
+        <div className="flex-1 p-3 overflow-y-auto">
           {/* Display teams and boards */}
           {sidebarTeamGroups.length > 0 ? (
             sidebarTeamGroups.map((teamGroup) => (
-              <div key={teamGroup.id} className="mb-4">
-                <h3 className="text-md font-semibold text-gray-800 dark:text-gray-200 mb-2">{teamGroup.name}</h3>
-                <div className="space-y-2 pl-2">
+              <div key={teamGroup.id} className="mb-5">
+                <h3 className="px-3 mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
+                  {getSidebarTeamName(teamGroup.name)}
+                </h3>
+                <div className="space-y-1">
                   {uniqueBoards
                     .filter((board) => teamGroup.teamIds.includes(board.team_id))
                     .map((board) => (
                     <button
                       key={board.id}
                       onClick={() => handleBoardSelect(board.id)}
-                      className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+                      className={`group relative w-full text-left px-3 py-2.5 rounded-lg border transition-all duration-200 ${
                         selectedBoardId === board.id
-                          ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'
+                          ? 'bg-slate-800/80 border-slate-700 text-slate-100 shadow-[inset_2px_0_0_0_#38bdf8]'
+                          : 'bg-transparent border-transparent text-gray-300 hover:bg-gray-900 hover:border-gray-800 hover:text-gray-100'
                       }`}
                     >
-                      <div className="font-medium">{board.name}</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                        {new Date(board.created_at).toLocaleDateString('pt-BR')}
+                      <div className="flex items-center gap-2.5">
+                        <Folder
+                          size={15}
+                          className={`${selectedBoardId === board.id ? 'text-sky-300' : 'text-gray-500 group-hover:text-gray-300'} transition-colors`}
+                        />
+                        <span className="truncate text-sm font-medium">{board.name}</span>
                       </div>
                     </button>
                   ))}
@@ -348,10 +347,10 @@ export default function HomePage() {
                       setSelectedTeamId(teamGroup.id);
                       setIsCreatingBoard(true);
                     }}
-                    className="mt-2 w-full px-4 py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors flex items-center justify-center gap-2 text-sm"
+                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-700 bg-transparent text-gray-300 text-sm font-medium hover:bg-gray-900 hover:border-sky-700/60 hover:text-sky-300 transition-all duration-200"
                   >
                     <Plus size={14} />
-                    <span>Novo Board para {teamGroup.name}</span>
+                    <span>Novo Board</span>
                   </button>
                 </div>
               </div>
@@ -394,22 +393,6 @@ export default function HomePage() {
                   placeholder="Nome do board"
                   autoFocus
                 />
-                {uniqueTeams.length > 0 && (
-                  <div className="mb-4">
-                    <label htmlFor="team-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Selecionar Time
-                    </label>
-                    <select
-                      id="team-select"
-                      onChange={(e) => setSelectedTeamId(e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={selectedTeamId || uniqueTeams[0]?.id || ''}
-                      disabled={uniqueTeams.length === 0}
-                    >
-                      {renderTeamOptions()}
-                    </select>
-                  </div>
-                )}
                 {uniqueTeams.length === 0 && (
                   <p className="mb-4 text-sm text-yellow-700 dark:text-yellow-400">
                     Crie um time primeiro para poder criar um board.

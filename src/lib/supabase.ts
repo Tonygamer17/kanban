@@ -294,16 +294,22 @@ export const tasksApi = {
       status?: string;
       position?: number;
       due_date?: string | null;
+      updated_at?: string;
     }
   ) {
     const { data, error } = await supabase
-      .from('tasks')
+      .from("tasks")
       .update(updates)
-      .eq('id', id)
-      .select()
+      .eq("id", id)
+      .select("*")
       .single();
-    
-    if (error) throw error;
+
+    if (error) {
+      console.error("SUPABASE UPDATE TASK ERROR FULL:", error);
+      alert(error.message);
+      throw error;
+    }
+
     return data;
   },
 

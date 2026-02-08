@@ -28,6 +28,16 @@ const dedupeTeamsById = <T extends { id: string }>(teams: T[]): T[] => {
   return Array.from(byId.values());
 };
 
+const dedupeTasksById = <T extends { id: string }>(tasks: T[]): T[] => {
+  const byId = new Map<string, T>();
+  for (const task of tasks) {
+    if (task?.id) {
+      byId.set(task.id, task);
+    }
+  }
+  return Array.from(byId.values());
+};
+
 export const useKanbanStore = create<KanbanStore>()(
   devtools(
     (set, get) => ({
@@ -256,7 +266,7 @@ export const useKanbanStore = create<KanbanStore>()(
         try {
           const tasks = await tasksApi.getByColumnId(columnId);
           set((state) => ({
-            tasks: [...state.tasks.filter((task) => task.column_id !== columnId), ...tasks],
+            tasks: dedupeTasksById([...state.tasks.filter((task) => task.column_id !== columnId), ...tasks]),
             loading: false,
           }));
         } catch (error) {
@@ -274,7 +284,7 @@ export const useKanbanStore = create<KanbanStore>()(
           const position = tasks.filter((task) => task.column_id === columnId).length;
           const newTask = await tasksApi.create(columnId, title, description || '', 'medium', 'todo', position);
           set((state) => ({
-            tasks: [...state.tasks, newTask],
+            tasks: dedupeTasksById([...state.tasks, newTask]),
             loading: false,
           }));
         } catch (error) {
@@ -285,16 +295,31 @@ export const useKanbanStore = create<KanbanStore>()(
         }
       },
 
-      updateTask: async (id: string, title: string, description?: string) => {
+      updateTask: async (
+        id: string,
+        updates: {
+          title?: string;
+          description?: string;
+          status?: Task['status'];
+          updated_at?: string;
+        }
+      ) => {
         set({ loading: true, error: null });
         try {
-          const updates: { title: string; description?: string } = { title };
-          if (description !== undefined) {
-            updates.description = description;
-          }
           const updatedTask = await tasksApi.update(id, updates);
           set((state) => ({
-            tasks: state.tasks.map((task) => (task.id === id ? updatedTask : task)),
+            tasks: dedupeTasksById(state.tasks.map((task) => (task.id === id ? updatedTask : task))),
+            currentBoard: state.currentBoard
+              ? {
+                  ...state.currentBoard,
+                  columns: state.currentBoard.columns.map((column) => ({
+                    ...column,
+                    tasks: dedupeTasksById(
+                      (column.tasks || []).map((task) => (task.id === id ? updatedTask : task))
+                    ),
+                  })),
+                }
+              : state.currentBoard,
             loading: false,
           }));
         } catch (error) {
@@ -335,7 +360,7 @@ export const useKanbanStore = create<KanbanStore>()(
 
           const updatedTask = { ...taskToMove, column_id: targetColumnId, position: newIndex };
           set((state) => ({
-            tasks: state.tasks.map((task) => (task.id === taskId ? updatedTask : task)),
+            tasks: dedupeTasksById(state.tasks.map((task) => (task.id === taskId ? updatedTask : task))),
             loading: false,
           }));
         } catch (error) {
