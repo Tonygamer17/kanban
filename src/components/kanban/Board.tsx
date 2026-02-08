@@ -3,7 +3,7 @@
 import { BoardWithColumns, TeamMember } from '@/types/kanban';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortable';
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, KeyboardEvent } from 'react';
 import { fetchBoardWithColumns, useKanbanStore } from '@/lib/store';
 import { ColumnComponent } from './Column';
 import { Plus, Edit, ChevronRight, LayoutGrid, CheckSquare } from 'lucide-react';
@@ -22,6 +22,7 @@ interface BoardProps {
 export function BoardComponent({ board, className }: BoardProps) {
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColumnName, setNewColumnName] = useState('');
+  const [columnNameError, setColumnNameError] = useState('');
   const [isCreatingColumn, setIsCreatingColumn] = useState(false);
   const [isEditingBoard, setIsEditingBoard] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({
@@ -177,20 +178,43 @@ export function BoardComponent({ board, className }: BoardProps) {
     })
   );
 
+  const openCreateColumnModal = () => {
+    setColumnNameError('');
+    setIsAddingColumn(true);
+  };
+
+  const closeCreateColumnModal = () => {
+    setNewColumnName('');
+    setColumnNameError('');
+    setIsAddingColumn(false);
+  };
+
   const handleCreateColumn = async () => {
     const trimmedName = newColumnName.trim();
-    if (!trimmedName || isCreatingColumn) return;
+    if (isCreatingColumn) return;
+
+    if (!trimmedName) {
+      setColumnNameError('Digite um nome para a coluna.');
+      return;
+    }
 
     setIsCreatingColumn(true);
+    setColumnNameError('');
     try {
       await createColumn(board.id, trimmedName);
       await refreshBoardState();
-      setNewColumnName('');
-      setIsAddingColumn(false);
+      closeCreateColumnModal();
     } catch (error) {
       console.error('Failed to create column:', error);
     } finally {
       setIsCreatingColumn(false);
+    }
+  };
+
+  const handleColumnInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleCreateColumn();
     }
   };
 
@@ -279,7 +303,7 @@ export function BoardComponent({ board, className }: BoardProps) {
             <div className="flex gap-2.5">
               {!isAddingColumn && (
                 <button
-                  onClick={() => setIsAddingColumn(true)}
+                  onClick={openCreateColumnModal}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors shadow-sm"
                 >
                   <Plus size={16} />
@@ -300,37 +324,6 @@ export function BoardComponent({ board, className }: BoardProps) {
         <div className="px-8 pt-4">
           <BoardFilters filters={filters} teamMembers={teamMembers} onFiltersChange={setFilters} />
         </div>
-
-        {isAddingColumn && (
-          <div className="px-8 py-5 border-b border-gray-200 dark:border-gray-800">
-            <div className="flex gap-3">
-              <input
-                type="text"
-                value={newColumnName}
-                onChange={(e) => setNewColumnName(e.target.value)}
-                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Nome da coluna"
-                autoFocus
-              />
-              <button
-                onClick={handleCreateColumn}
-                disabled={isCreatingColumn}
-                className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isCreatingColumn ? 'Adicionando...' : 'Adicionar'}
-              </button>
-              <button
-                onClick={() => {
-                  setNewColumnName('');
-                  setIsAddingColumn(false);
-                }}
-                className="px-4 py-2.5 bg-gray-500 text-white rounded-xl hover:bg-gray-600 transition-colors"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        )}
 
         <div className="flex-1 px-8 py-6 overflow-x-auto">
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
@@ -353,7 +346,7 @@ export function BoardComponent({ board, className }: BoardProps) {
 
                 {!isAddingColumn && board.columns.length > 0 && (
                   <button
-                    onClick={() => setIsAddingColumn(true)}
+                    onClick={openCreateColumnModal}
                     className="w-80 h-fit p-4 border border-dashed border-gray-300 dark:border-gray-700 rounded-xl text-gray-500 dark:text-gray-400 hover:border-blue-400 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-300 transition-colors flex items-center justify-center gap-2 bg-white/70 dark:bg-gray-900/50"
                   >
                     <Plus size={20} />
@@ -379,6 +372,66 @@ export function BoardComponent({ board, className }: BoardProps) {
             setIsEditingBoard(false);
           }}
         />
+
+        {isAddingColumn && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <button
+              type="button"
+              aria-label="Fechar modal"
+              className="absolute inset-0 bg-black/50 backdrop-blur-[1px] transition-opacity duration-200"
+              onClick={closeCreateColumnModal}
+            />
+
+            <div className="relative w-full max-w-lg rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-2xl p-6 sm:p-7 transition-all duration-200 scale-100 opacity-100">
+              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Criar nova coluna</h3>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                Organize suas tasks criando etapas como A fazer, Em andamento e Concluido
+              </p>
+
+              <div className="mt-5">
+                <input
+                  type="text"
+                  value={newColumnName}
+                  onChange={(e) => {
+                    setNewColumnName(e.target.value);
+                    if (columnNameError) {
+                      setColumnNameError('');
+                    }
+                  }}
+                  onKeyDown={handleColumnInputKeyDown}
+                  className={cn(
+                    'w-full px-4 py-2.5 border rounded-xl bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500',
+                    columnNameError
+                      ? 'border-red-400 dark:border-red-500 focus:ring-red-400'
+                      : 'border-gray-300 dark:border-gray-700'
+                  )}
+                  placeholder="Ex: A fazer"
+                  autoFocus
+                />
+                {columnNameError && (
+                  <p className="mt-2 text-sm text-red-600 dark:text-red-400">{columnNameError}</p>
+                )}
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3">
+                <button
+                  onClick={closeCreateColumnModal}
+                  disabled={isCreatingColumn}
+                  className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCreateColumn}
+                  disabled={isCreatingColumn}
+                  className="px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-500 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isCreatingColumn ? 'Criando...' : 'Criar coluna'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </BoardErrorBoundary>
   );

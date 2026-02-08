@@ -66,9 +66,9 @@ export function Card({
   };
 
   const statusStyles: Record<string, string> = {
-    todo: 'text-slate-500 dark:text-slate-400',
-    in_progress: 'text-amber-600 dark:text-amber-400',
-    done: 'text-emerald-600 dark:text-emerald-400',
+    todo: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800/80 dark:text-slate-300 dark:border-slate-700',
+    in_progress: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800/60',
+    done: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800/60',
   };
 
   const updatedLabel = useMemo(() => {
@@ -153,7 +153,7 @@ export function Card({
         ref={setNodeRef}
         style={style}
         className={cn(
-          'bg-white dark:bg-gray-900 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700',
+          'bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-gray-200/80 dark:border-gray-700/80',
           className
         )}
       >
@@ -197,31 +197,31 @@ export function Card({
         ref={setNodeRef}
         style={style}
         className={cn(
-          'bg-white dark:bg-gray-900 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700 cursor-pointer hover:-translate-y-0.5 hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group',
+          'bg-white dark:bg-gray-900 rounded-2xl p-5 shadow-sm border border-gray-200/80 dark:border-gray-700/80 cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-gray-300 dark:hover:border-gray-600 transition-all duration-200 group',
           className
         )}
         role="article"
         aria-labelledby={`task-${task.id}-title`}
       >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3.5">
         <div className="flex-1">
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-2.5 flex items-center gap-2">
             {statusLabelMap[statusValue] ? (
-              <span className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium', statusStyles[statusValue] || statusStyles.todo)}>
-                <span className="text-[10px] leading-none">●</span>
+              <span className={cn('inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-semibold leading-none', statusStyles[statusValue] || statusStyles.todo)}>
+                <span className="text-[9px] leading-none">●</span>
                 {statusLabelMap[statusValue]}
               </span>
             ) : null}
           </div>
 
-          <h3 id={`task-${task.id}-title`} className="text-[15px] leading-6 font-semibold text-gray-900 dark:text-gray-100 mb-3">
+          <h3 id={`task-${task.id}-title`} className="text-sm leading-5 font-bold text-gray-900 dark:text-gray-100 mb-2.5">
             {task.title}
           </h3>
           {task.description && (
-            <p className="text-sm leading-6 text-gray-600 dark:text-gray-400 line-clamp-3 mb-5">{task.description}</p>
+            <p className="text-xs leading-5 text-gray-500 dark:text-gray-400/90 line-clamp-2 mb-4">{task.description}</p>
           )}
 
-          <div className="mb-4">
+          <div className="mb-4.5">
             <AssigneesComponent
               taskId={task.id}
               teamId={teamId}
@@ -232,19 +232,19 @@ export function Card({
             />
           </div>
 
-          <div className="pt-1 flex items-center justify-between gap-3">
+          <div className="pt-1.5 flex items-center justify-between gap-3">
             <select
               value={statusValue}
               onChange={(e) => handleStatusChange(e.target.value as TaskStatus)}
               disabled={isUpdatingStatus}
-              className="h-7 rounded-md border border-gray-200 bg-gray-50 px-2 text-[11px] font-medium text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 disabled:opacity-60"
+              className="h-7 rounded-full border border-gray-200/90 bg-white/90 px-2.5 text-[10px] font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-gray-700 dark:bg-gray-800/90 dark:text-gray-300 dark:hover:bg-gray-800 disabled:opacity-60"
             >
               <option value="todo">A fazer</option>
               <option value="in_progress">Em andamento</option>
               <option value="done">Concluído</option>
             </select>
 
-            {updatedLabel ? <span className="text-[11px] text-gray-400">{updatedLabel}</span> : null}
+            {updatedLabel ? <span className="text-[10px] text-gray-400/90">{updatedLabel}</span> : null}
           </div>
 
         </div>

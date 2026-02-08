@@ -3,10 +3,11 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useKanbanStore } from '@/lib/store';
 import { BoardComponent } from '@/components/kanban/Board';
-import { Plus, Loader2, LogOut, Folder } from 'lucide-react';
+import { Plus, Loader2, FolderOpen, AlertCircle } from 'lucide-react';
 import { fetchBoardWithColumns } from '@/lib/store';
 import { useAuth } from '@/components/AuthContextProvider'; // NEW
 import { Team } from '@/types/kanban'; // NEW
+import { BoardsSidebar } from '@/components/kanban/BoardsSidebar';
 
 
 
@@ -17,6 +18,8 @@ export default function HomePage() {
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [isCreatingBoard, setIsCreatingBoard] = useState(false);
   const [isCreatingTeam, setIsCreatingTeam] = useState(false);
+  const [isBoardLoading, setIsBoardLoading] = useState(false);
+  const [boardLoadError, setBoardLoadError] = useState<string | null>(null);
   const [newBoardTitle, setNewBoardTitle] = useState('');
   const fetchedTeamsForUserRef = useRef<string | null>(null);
   const { user, signOut } = useAuth(); // Get user and signOut from auth context
@@ -56,6 +59,11 @@ export default function HomePage() {
     return Array.from(byId.values());
   }, [boards]);
 
+  const visibleBoards = useMemo(() => {
+    const teamIds = new Set(uniqueTeams.map((team) => team.id));
+    return uniqueBoards.filter((board) => teamIds.has(board.team_id));
+  }, [uniqueBoards, uniqueTeams]);
+
   const sidebarTeamGroups = useMemo(() => {
     const byName = new Map<
       string,
@@ -84,24 +92,29 @@ export default function HomePage() {
     return Array.from(byName.values());
   }, [uniqueTeams]);
 
-  const getSidebarTeamName = (name: string) => {
-    const normalized = name.trim().toLowerCase();
-    if (normalized === 'my first team' || normalized === 'primeiro time') {
-      return 'Workspace';
-    }
-    return name;
-  };
-
   const loadBoard = useCallback(async (boardId: string) => {
-    
+    setIsBoardLoading(true);
+    setBoardLoadError(null);
+
     try {
-      const boardData = await fetchBoardWithColumns(boardId);
+      const timeoutPromise = new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout ao carregar o board')), 10000);
+      });
+
+      const boardData = await Promise.race([fetchBoardWithColumns(boardId), timeoutPromise]);
       
       if (boardData) {
         setCurrentBoard(boardData);
+      } else {
+        setCurrentBoard(null);
+        setBoardLoadError('Nao foi possivel carregar este board.');
       }
     } catch (error) {
       console.error('❌ ERROR: loadBoard failed:', error);
+      setCurrentBoard(null);
+      setBoardLoadError('Falha ao carregar o board.');
+    } finally {
+      setIsBoardLoading(false);
     }
   }, [setCurrentBoard]);
 
@@ -129,13 +142,13 @@ export default function HomePage() {
       return;
     }
 
-    if (uniqueBoards.length > 0 && !selectedBoardId) {
+    if (visibleBoards.length > 0 && !selectedBoardId) {
       // Auto-select first board
-      const firstBoard = uniqueBoards[0];
+      const firstBoard = visibleBoards[0];
       setSelectedBoardId(firstBoard.id);
       loadBoard(firstBoard.id);
     }
-  }, [uniqueBoards, selectedBoardId, loadBoard, isCreatingBoard]);
+  }, [visibleBoards, selectedBoardId, loadBoard, isCreatingBoard]);
 
   useEffect(() => {
     if (!selectedTeamId && uniqueTeams.length > 0) {
@@ -198,6 +211,21 @@ export default function HomePage() {
     loadBoard(boardId);
   };
 
+  const handleQuickCreateBoard = async () => {
+    let targetTeamId = selectedTeamId || uniqueTeams[0]?.id;
+
+    if (!targetTeamId) {
+      if (!user?.id) return;
+      const team = await createTeam('Workspace', user.id);
+      targetTeamId = team.id;
+      setSelectedTeamId(team.id);
+    }
+
+    await createBoard('Meu primeiro board', targetTeamId);
+    setSelectedBoardId(null);
+    setIsCreatingBoard(false);
+  };
+
   if (loading && boards.length === 0 && teams.length === 0) { // Modified loading condition
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-950">
@@ -228,160 +256,73 @@ export default function HomePage() {
     );
   }
 
-  if (boards.length === 0 && teams.length === 0) { // Modified condition for no boards/teams
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-gray-950">
-        <div className="text-center max-w-md">
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-            Bem-vindo ao Kanban App
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mb-8">
-            Crie seu primeiro time e board para começar a organizar suas tarefas.
-          </p>
-          
-          {isCreatingBoard ? (
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
-              <input
-                type="text"
-                value={newBoardTitle}
-                onChange={(e) => setNewBoardTitle(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-                placeholder="Nome do board"
-                autoFocus
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCreateBoard}
-                  className="flex-1 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                >
-                  Criar Board
-                </button>
-                <button
-                  onClick={() => {
-                    setNewBoardTitle('');
-                    setIsCreatingBoard(false);
-                  }}
-                  className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                >
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          ) : (
-                <span>
-                  <button
-                    onClick={handleCreateFirstTeam}
-                    disabled={isCreatingTeam}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors mr-4"
-                  >
-                    <Plus size={20} />
-                    <span>{isCreatingTeam ? 'Criando...' : 'Criar Primeiro Team'}</span>
-                  </button>
-                  <button
-                    onClick={signOut}
-                    className="inline-flex items-center gap-2 px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
-                  >
-                    <span>Sair</span>
-                  </button>
-                </span>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-950">
-      {/* Sidebar */}
-      <div className="w-72 bg-gray-950 border-r border-gray-800/90 flex flex-col">
-        <div className="p-5 border-b border-gray-800/80">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold tracking-wide uppercase text-gray-200">
-              Meus Boards
-            </h2>
-            <button
-              onClick={signOut}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-md text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-all duration-200"
-              title="Sair"
-            >
-              <LogOut size={15} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex-1 p-3 overflow-y-auto">
-          {/* Display teams and boards */}
-          {sidebarTeamGroups.length > 0 ? (
-            sidebarTeamGroups.map((teamGroup) => (
-              <div key={teamGroup.id} className="mb-5">
-                <h3 className="px-3 mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-gray-500">
-                  {getSidebarTeamName(teamGroup.name)}
-                </h3>
-                <div className="space-y-1">
-                  {uniqueBoards
-                    .filter((board) => teamGroup.teamIds.includes(board.team_id))
-                    .map((board) => (
-                    <button
-                      key={board.id}
-                      onClick={() => handleBoardSelect(board.id)}
-                      className={`group relative w-full text-left px-3 py-2.5 rounded-lg border transition-all duration-200 ${
-                        selectedBoardId === board.id
-                          ? 'bg-slate-800/80 border-slate-700 text-slate-100 shadow-[inset_2px_0_0_0_#38bdf8]'
-                          : 'bg-transparent border-transparent text-gray-300 hover:bg-gray-900 hover:border-gray-800 hover:text-gray-100'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <Folder
-                          size={15}
-                          className={`${selectedBoardId === board.id ? 'text-sky-300' : 'text-gray-500 group-hover:text-gray-300'} transition-colors`}
-                        />
-                        <span className="truncate text-sm font-medium">{board.name}</span>
-                      </div>
-                    </button>
-                  ))}
-                  {/* Button to create new board for this team */}
-                  <button
-                    onClick={() => {
-                      setSelectedBoardId(null); // Clear selected board to show "create board" UI for this team
-                      setCurrentBoard(null);
-                      setSelectedTeamId(teamGroup.id);
-                      setIsCreatingBoard(true);
-                    }}
-                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border border-gray-700 bg-transparent text-gray-300 text-sm font-medium hover:bg-gray-900 hover:border-sky-700/60 hover:text-sky-300 transition-all duration-200"
-                  >
-                    <Plus size={14} />
-                    <span>Novo Board</span>
-                  </button>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-center text-gray-500 dark:text-gray-400">
-              Nenhum time encontrado. Crie um novo.
-              <button
-                onClick={() => {
-                  handleCreateFirstTeam();
-                }}
-                disabled={isCreatingTeam}
-                className="mt-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
-              >
-                {isCreatingTeam ? 'Criando...' : 'Criar Primeiro Time'}
-              </button>
-            </div>
-          )}
-
-
-          {/* Old "Create First Board" UI removed or integrated into team sections */}
-
-        </div>
-      </div>
+      <BoardsSidebar
+        teamGroups={sidebarTeamGroups}
+        boards={visibleBoards}
+        selectedBoardId={selectedBoardId}
+        isCreatingTeam={isCreatingTeam}
+        onSelectBoard={handleBoardSelect}
+        onCreateBoardForTeam={(teamId) => {
+          setSelectedBoardId(null);
+          setBoardLoadError(null);
+          setCurrentBoard(null);
+          setSelectedTeamId(teamId);
+          setIsCreatingBoard(true);
+        }}
+        onCreateFirstTeam={handleCreateFirstTeam}
+        onSignOut={signOut}
+      />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {currentBoard ? (
           <BoardComponent board={currentBoard} />
+        ) : isBoardLoading ? (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 text-center w-full max-w-md">
+              <Loader2 className="animate-spin mx-auto mb-4 text-gray-500" size={30} />
+              <p className="text-gray-700 dark:text-gray-300 font-medium">Carregando board...</p>
+            </div>
+          </div>
+        ) : boardLoadError ? (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 text-center w-full max-w-md">
+              <AlertCircle className="mx-auto mb-4 text-red-500" size={28} />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Erro ao carregar board</h2>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">{boardLoadError}</p>
+              <button
+                onClick={() => {
+                  if (selectedBoardId) {
+                    loadBoard(selectedBoardId);
+                  } else {
+                    fetchBoards();
+                  }
+                }}
+                className="mt-5 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          </div>
+        ) : visibleBoards.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 text-center w-full max-w-md">
+              <FolderOpen className="mx-auto mb-4 text-gray-400" size={30} />
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Nenhum board ainda</h2>
+              <p className="text-gray-600 dark:text-gray-400 mt-2">Crie seu primeiro board para começar</p>
+              <button
+                onClick={handleQuickCreateBoard}
+                className="mt-5 inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors"
+              >
+                <Plus size={16} />
+                Criar board
+              </button>
+            </div>
+          </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center">
+          <div className="flex-1 flex items-center justify-center p-6">
             {isCreatingBoard ? ( // Show board creation form here if active
               <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 max-w-md w-full">
                 <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-gray-100">Criar Novo Board</h2>
@@ -410,9 +351,10 @@ export default function HomePage() {
                     onClick={() => {
                       setNewBoardTitle('');
                       setIsCreatingBoard(false);
-                       setSelectedBoardId(uniqueBoards[0]?.id || null); // Go back to first board or null
-                       if (uniqueBoards.length > 0) loadBoard(uniqueBoards[0].id);
-                     }}
+                      setBoardLoadError(null);
+                       setSelectedBoardId(visibleBoards[0]?.id || null); // Go back to first board or null
+                       if (visibleBoards.length > 0) loadBoard(visibleBoards[0].id);
+                      }}
                     className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
                   >
                     Cancelar
@@ -420,9 +362,10 @@ export default function HomePage() {
                 </div>
               </div>
             ) : (
-              <div className="text-center">
-                <Loader2 className="animate-spin mx-auto mb-4" size={32} />
-                <p className="text-gray-600 dark:text-gray-400">Carregando board...</p>
+              <div className="bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 text-center w-full max-w-md">
+                <FolderOpen className="mx-auto mb-4 text-gray-400" size={30} />
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Selecione um board no menu</h2>
+                <p className="text-gray-600 dark:text-gray-400 mt-2">Escolha um board na sidebar para visualizar suas colunas e tasks.</p>
               </div>
             )}
           </div>

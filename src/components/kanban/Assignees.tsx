@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { TeamMember } from '@/types/kanban';
-import { Users, Plus, X } from 'lucide-react';
+import { Users, Plus, X, UserPlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 
@@ -125,9 +125,9 @@ export function AssigneesComponent({
           <button
             onClick={() => setIsOpen(true)}
             disabled={!currentUserId}
-            className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-md hover:border-gray-400 dark:hover:border-gray-500 transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 border border-transparent rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
           >
-            <Plus size={12} />
+            <UserPlus size={12} />
             Assign
           </button>
         )}
@@ -136,7 +136,7 @@ export function AssigneesComponent({
           <button
             onClick={() => setIsOpen(true)}
             disabled={!currentUserId || loading}
-            className="w-6 h-6 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full flex items-center justify-center transition-colors disabled:opacity-50"
+            className="w-6 h-6 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full flex items-center justify-center transition-colors disabled:opacity-50"
             title="Add assignee"
           >
             <Plus size={12} className="text-gray-600 dark:text-gray-300" />
